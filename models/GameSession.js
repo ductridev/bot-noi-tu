@@ -10,6 +10,11 @@ const GameSession = new Schema({
         id: { type: String, required: true },
         name: { type: String, required: true }
     },
+    playerStats: [{
+        id: { type: String, required: true },
+        name: { type: String, required: true },
+        correctCount: { type: Number, default: 0 }
+    }],
     queryCount: { type: Number, default: 0, required: true },
     wordPlayed: { type: Number, default: 0, required: true },
     roundPlayed: { type: Number, default: 0, required: true }

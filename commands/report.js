@@ -67,15 +67,15 @@ const reportEmbed = (wordData, status = 0, lang = 'vi') =>
         )
         .setTimestamp();
 
-async function isInReportList(word) {
-    const reportDoc = await WordList.findOne({ name: 'report' });
+async function isInReportList(word, language = 'vi') {
+    const reportDoc = await WordList.findOne({ name: 'report', language });
     return reportDoc?.words.includes(word);
 }
 
-async function addToReportList(word) {
-    let reportDoc = await WordList.findOne({ name: 'report' });
+async function addToReportList(word, language = 'vi') {
+    let reportDoc = await WordList.findOne({ name: 'report', language });
     if (!reportDoc) {
-        reportDoc = new WordList({ name: 'report', words: [] });
+        reportDoc = new WordList({ name: 'report', language, words: [] });
     }
     if (!reportDoc.words.includes(word)) {
         reportDoc.words.push(word);
@@ -95,8 +95,11 @@ module.exports = {
         ),
 
     async execute(interaction, client) {
-        const config = await GuildConfig.findOne({ guildId: interaction.guildId });
-        const lang = config?.language === 'en' ? 'en' : 'vi';
+        const guildId = interaction.guildId;
+        const channelId = interaction.channelId;
+        const config = await GuildConfig.findOne({ guildId });
+        const channelConfig = config?.channels?.find(c => c.channelId === channelId);
+        const lang = channelConfig?.language === 'en' ? 'en' : 'vi';
 
         if (!REPORT_CHANNEL) {
             return interaction.reply({
@@ -105,12 +108,12 @@ module.exports = {
             });
         }
 
-        if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-            return interaction.reply({
-                content: t[lang].noPermission,
-                ephemeral: true,
-            });
-        }
+        // if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
+        //     return interaction.reply({
+        //         content: t[lang].noPermission,
+        //         ephemeral: true,
+        //     });
+        // }
 
         let word = interaction.options.getString('word');
         let reason = interaction.options.getString('reason') ?? 'No reason provided.';
@@ -124,14 +127,14 @@ module.exports = {
             });
         }
 
-        if (!dictionary.checkWordIfInDictionary(word)) {
+        if (!dictionary.checkWordIfInDictionary(word, lang)) {
             return interaction.reply({
                 content: t[lang].notInDict,
                 ephemeral: true,
             });
         }
 
-        if (await isInReportList(word)) {
+        if (await isInReportList(word, lang)) {
             return interaction.reply({
                 content: t[lang].alreadyReported,
                 ephemeral: true,
@@ -179,7 +182,7 @@ module.exports = {
             let status;
             if (i.customId === 'accept') {
                 status = 1;
-                await addToReportList(word);
+                await addToReportList(word, lang);
             } else {
                 status = 2;
             }

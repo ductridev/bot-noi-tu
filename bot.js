@@ -1,3 +1,16 @@
+const handleExit = async () => {
+    process.exit();
+};
+process.on('unhandledRejection', (reason, promise) => {
+    console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+});
+process.on('uncaughtException', err => {
+    console.error('Uncaught Exception thrown:', err.message, err.stack);
+});
+process.on('SIGINT', handleExit);
+process.on('SIGTERM', handleExit);
+process.on('SIGQUIT', handleExit);
+
 const { Client, GatewayIntentBits, Collection, PermissionsBitField } = require('discord.js')
 const fs = require('fs')
 require('dotenv').config()
@@ -161,7 +174,13 @@ client.on('messageCreate', async message => {
         const word = await randomWord();
         await GameSession.findOneAndUpdate(
             { guildId, channelId, language },      // include language
-            { running: true, words: [word], currentPlayer: {}, language },
+            {
+                running: true,
+                words: [word],
+                currentPlayer: {},
+                playerStats: [],
+                language
+            },
             { upsert: true }
         );
         sendMessageToChannel(`Từ bắt đầu: **${word}**`, channelId);
@@ -339,7 +358,6 @@ client.on('messageCreate', async message => {
     message.react('✅');
     // pass language
     await stats.addWordPlayedCount(language);
-    await player.changeCoins(message.guild.id, message.author.id, 10);
     await updateRankingForUser(
         message.author.id, 0, 1, 1,
         message.guild.id,
@@ -347,12 +365,51 @@ client.on('messageCreate', async message => {
         message.author.avatarURL()
     );
 
-    console.log(`[${message.guild.name}][${message.channel.name}][#${words.length}] ${tu}`);
+    if (language === 'en') {
+        // Ensure playerStats is initialized
+        if (!session.playerStats) {
+            session.playerStats = [];
+        }
+
+        let stat = session.playerStats.find(p => p.id === message.author.id);
+        if (!stat) {
+            stat = {
+                id: message.author.id,
+                name: message.member.displayName,
+                correctCount: 1
+            };
+            session.playerStats.push(stat);
+        } else {
+            stat.correctCount += 1;
+        }
+
+        // ✅ Tell Mongoose the array was modified
+        session.markModified('playerStats');
+        await session.save();
+
+        // Check win condition
+        if (stat.correctCount >= 50) {
+            sendMessageToChannel(`${message.author.tag} đã chiến thắng sau khi trả lời đúng 50 từ tiếng Anh và nhận được 100 xu! Lượt mới đã bắt đầu!`, message.channel.id);
+
+            await updateRankingForUser(
+                message.author.id, 1, 0, 0,
+                message.guild.id,
+                message.author.displayName,
+                message.author.avatarURL()
+            );
+
+            await stats.addRoundPlayedCount(language);
+            await initWordData(message.guild.id, message.channel.id);
+            await startGame(message.guild.id, message.channel.id);
+            await player.changeCoins(message.guild.id, message.author.id, 100);
+            return;
+        }
+    }
 
     const hasAnswer = await checkIfHaveAnswer(tu, session.words || []);
 
     if (!hasAnswer) {
-        sendMessageToChannel(`${message.author.displayName} đã chiến thắng sau ${words.length - 1} lượt! Lượt mới đã bắt đầu!`, message.channel.id);
+        sendMessageToChannel(`${message.author.tag} đã chiến thắng sau ${words.length - 1} lượt và nhận được 100 xu! Lượt mới đã bắt đầu!`, message.channel.id);
         await updateRankingForUser(
             message.author.id, 1, 0, 0,
             message.guild.id,
@@ -363,8 +420,12 @@ client.on('messageCreate', async message => {
         await stats.addRoundPlayedCount(language);
         await initWordData(message.guild.id, message.channel.id);
         await startGame(message.guild.id, message.channel.id);
+        await player.changeCoins(message.guild.id, message.author.id, 100);
         return;
     }
+
+    // Increase 10 coins if not end yet
+    await player.changeCoins(message.guild.id, message.author.id, 10);
 
     // pass language
     await stats.addQuery(language);

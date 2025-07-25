@@ -7,8 +7,8 @@ const GuildConfig = require('../models/GuildConfig');
  * @param {String} guildId 
  * @returns {Promise<Array>}
  */
-const getRankOfServer = async (guildId) => {
-    const rankRecord = await Ranking.findOne({ guildId }).lean();
+const getRankOfServer = async (guildId, channelId, language = 'vi') => {
+    const rankRecord = await Ranking.findOne({ guildId, channelId, language }).lean();
     if (!rankRecord || !Array.isArray(rankRecord.players)) return [];
 
     const sortedPlayers = [...rankRecord.players].sort((a, b) => {
@@ -27,10 +27,11 @@ const getRankOfServer = async (guildId) => {
 /**
  * 
  * @param {String} guildId 
- * @param {String} lang 
+ * @param {String} channelId
+ * @param {String} language 
  * @returns {Promise<Array<Object>>}
  */
-const embedData = async (guildId, lang = 'vi') => {
+const embedData = async (guildId, channelId, language = 'vi') => {
     const t = {
         vi: {
             top: 'Top 10',
@@ -44,9 +45,9 @@ const embedData = async (guildId, lang = 'vi') => {
             correct: 'Correct words',
             empty: 'No one has played in this server yet.'
         }
-    }[lang];
+    }[language];
 
-    const rankOfServer = await getRankOfServer(guildId);
+    const rankOfServer = await getRankOfServer(guildId, channelId, language);
 
     if (rankOfServer.length === 0) {
         return [{ name: t.top, value: t.empty }];
@@ -71,10 +72,12 @@ const embedData = async (guildId, lang = 'vi') => {
 
 const rankEmbed = async (interaction) => {
     const guildId = interaction.guildId;
+    const channelId = interaction.channelId;
     const config = await GuildConfig.findOne({ guildId });
-    const lang = config?.language === 'en' ? 'en' : 'vi';
+    const channelConfig = config?.channels?.find(c => c.channelId === channelId);
+    const lang = channelConfig?.language === 'en' ? 'en' : 'vi';
 
-    const fields = await embedData(guildId, lang);
+    const fields = await embedData(guildId, channelId, lang);
     return new EmbedBuilder()
         .setColor(13250094)
         .setAuthor({
