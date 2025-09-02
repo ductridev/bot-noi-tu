@@ -374,14 +374,11 @@ async function autoResolveDiceAnimation(guildId) {
             const finalDice = rollDice();
             const sum = finalDice.reduce((a, b) => a + b, 0);
             
-            console.log(`No bets found for guild ${guildId}, showing final result only`);
-            
             // Update dice message with final result
             try {
-                const finalDiceMessage = createDiceOnlyMessage(finalDice);
-                await diceMessage.edit({ content: finalDiceMessage });
+                await diceMessage.delete();
             } catch (err) {
-                console.error('Error updating dice message:', err);
+                console.error('Error deleting dice message:', err);
             }
 
             // Create simple game info message and update countdown message
@@ -751,8 +748,6 @@ async function removeBettingButtons(guildId, lang) {
             embeds: message.embeds,
             components: []
         });
-
-        console.log(`Removed betting buttons for guild ${guildId}`);
     } catch (error) {
         console.error('Error removing betting buttons:', error);
     }
