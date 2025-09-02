@@ -196,11 +196,10 @@ function createResultEmbed(finalDice, sum, lang, betResults, gameOutcomes) {
 function determineGameOutcomes(dice, sum, lang) {
     const outcomes = [];
     
+    outcomes.push(`${DICE_FACES[dice[0] - 1]} ${DICE_FACES[dice[1] - 1]} ${DICE_FACES[dice[2] - 1]} = ${sum}`);
+
     // Big/Small (Tài/Xỉu)
-    const isTriple = dice[0] === dice[1] && dice[1] === dice[2];
-    if (isTriple) {
-        outcomes.push(lang === 'en' ? 'Big/Small: Triple (Neither)' : 'Tài/Xỉu: Ba đồng (Không có)');
-    } else if (sum >= 11 && sum <= 17) {
+    if (sum >= 11 && sum <= 17) {
         outcomes.push(lang === 'en' ? 'Big/Small: **Big (Tài)**' : 'Tài/Xỉu: **Tài**');
     } else if (sum >= 4 && sum <= 10) {
         outcomes.push(lang === 'en' ? 'Big/Small: **Small (Xỉu)**' : 'Tài/Xỉu: **Xỉu**');
