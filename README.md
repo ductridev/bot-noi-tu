@@ -1,4 +1,5 @@
 # 🤖 Bot Nối Từ - Vietnamese/English Word Chain Discord Bot
+#### Made by Gúp Bu Ngô with ❤️
 
 A feature-rich Discord bot that brings Vietnamese and English word-chain games to your server, complete with gambling features, statistics tracking, and multilingual support.
 
