@@ -439,7 +439,8 @@ async function autoResolveDiceAnimation(guildId) {
                     continue;
                 }
 
-                console.log(`Processing bet: ${bet.betType} by ${bet.userName} for ${bet.amount}`);
+                console.log(`Processing bet: betType="${bet.betType}", betDetails="${bet.betDetails}", userId="${bet.userId}", amount="${bet.amount}"`);
+                console.log(`Full bet object:`, JSON.stringify(bet, null, 2));
 
                 const payout = await calculatePayout(bet, finalDice);
                 const isWin = payout > 0;
@@ -448,8 +449,14 @@ async function autoResolveDiceAnimation(guildId) {
                 const betAmount = bet.amount || 0;
                 const betPayout = payout || 0;
                 
+                // Create result object with explicit property copying to avoid Mongoose issues
                 const result = {
-                    ...bet,
+                    userId: bet.userId,
+                    userName: bet.userName,
+                    betType: bet.betType,
+                    betDetails: bet.betDetails,
+                    amount: bet.amount,
+                    timestamp: bet.timestamp,
                     payout: betPayout,
                     isWin,
                     netGain: isWin ? betPayout - betAmount : -betAmount
@@ -474,6 +481,10 @@ async function autoResolveDiceAnimation(guildId) {
                 }
                 
                 const playerData = playerSummaries.get(bet.userId);
+                
+                // Debug the result object before adding to player data
+                console.log(`Adding to playerData: betType="${result.betType}", betDetails="${result.betDetails}", amount="${result.amount}"`);
+                
                 playerData.bets.push(result);
                 playerData.totalBet += betAmount;
                 playerData.totalWon += betPayout;
@@ -568,14 +579,32 @@ function formatComprehensiveResults(playerSummaries, lang) {
             // Add safety checks for bet data
             const betType = bet.betType || 'unknown';
             const betDetails = bet.betDetails;
-            const betDesc = getBetDescription(betType, betDetails, lang);
+            
+            // Debug logging for bet processing
+            console.log(`Processing bet display: betType="${betType}", betDetails="${betDetails}", amount="${bet.amount}"`);
+            
+            // For total bets, use betDetails as the value
+            let displayValue = betDetails;
+            if (betType === 'total' && betDetails) {
+                displayValue = betDetails;
+            }
+            
+            const betDesc = getBetDescription(betType, displayValue, lang);
             const amount = bet.amount || 0;
             const payout = bet.payout || 0;
             
-            const outcome = bet.isWin ? 
-                (lang === 'vi' ? `✅ Thắng: ${payout.toLocaleString()}` : `✅ Won: ${payout.toLocaleString()}`) :
-                (lang === 'vi' ? `❌ Thua` : `❌ Lost`);
-            return `${betDesc} (${amount.toLocaleString()}) - ${outcome}`;
+            // New format: "Tổng 16: Thua -10" instead of "Tổng 16 (10) - ❌ Thua"
+            if (bet.isWin) {
+                const winAmount = `+${payout.toLocaleString()}`;
+                return lang === 'vi' ? 
+                    `${betDesc}: Thắng ${winAmount}` : 
+                    `${betDesc}: Won ${winAmount}`;
+            } else {
+                const lossAmount = `-${amount.toLocaleString()}`;
+                return lang === 'vi' ? 
+                    `${betDesc}: Thua ${lossAmount}` : 
+                    `${betDesc}: Lost ${lossAmount}`;
+            }
         }).join('\n  ');
 
         const netResult = (playerData.netResult || 0) >= 0 ? 
@@ -607,18 +636,28 @@ function getBetDescription(betType, value, lang) {
             small: 'Xỉu', 
             odd: 'Lẻ', 
             even: 'Chẵn',
-            total: value ? `Tổng ${value}` : 'Tổng'
+            unknown: 'Cược không xác định'
         },
         en: {
             big: 'Big', 
             small: 'Small', 
             odd: 'Odd', 
             even: 'Even',
-            total: value ? `Total ${value}` : 'Total'
+            unknown: 'Unknown bet'
         }
     };
     
     const langData = descriptions[lang] || descriptions['vi'];
+    
+    // Handle total bets specifically
+    if (betType === 'total') {
+        if (value !== undefined && value !== null) {
+            return lang === 'vi' ? `Tổng ${value}` : `Total ${value}`;
+        } else {
+            console.warn(`Total bet missing value: betType="${betType}", value="${value}"`);
+            return lang === 'vi' ? 'Tổng (không xác định)' : 'Total (undefined)';
+        }
+    }
     
     // Handle total bets with number suffix (e.g., total_4, total_16)
     if (betType.startsWith('total_')) {
@@ -626,8 +665,13 @@ function getBetDescription(betType, value, lang) {
         return lang === 'vi' ? `Tổng ${totalValue}` : `Total ${totalValue}`;
     }
     
-    // Return description or fallback to betType with value
-    return langData[betType] || (value ? `${betType} ${value}` : betType);
+    // Return description or fallback with warning
+    if (!langData[betType]) {
+        console.warn(`Unknown betType in getBetDescription: "${betType}", value: "${value}"`);
+        return lang === 'vi' ? `Cược không xác định (${betType})` : `Unknown bet (${betType})`;
+    }
+    
+    return langData[betType];
 }function getNumberCategory(sum) {
     if (sum >= 4 && sum <= 10) return 'small';
     if (sum >= 11 && sum <= 17) return 'big';
