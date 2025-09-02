@@ -165,6 +165,15 @@ async function handleSicBoModal(interaction) {
     let betType = interaction.customId.replace('sicbo_modal_', '');
     let specificNumber = null;
     
+    // Add safety check for betType
+    if (!betType || betType === '') {
+        console.error('Invalid betType parsed from customId:', interaction.customId);
+        return interaction.reply({
+            content: '❌ Invalid bet type. Please try again.\n❌ Loại cược không hợp lệ. Vui lòng thử lại.',
+            flags: MessageFlags.Ephemeral
+        });
+    }
+    
     // Check if this is a specific number bet (e.g., "total_5")
     if (betType.startsWith('total_')) {
         const parts = betType.split('_');
@@ -294,12 +303,23 @@ async function handleSicBoModal(interaction) {
         // Add bet to session
         const bet = {
             userId,
-            userName,
+            userName: userName || 'Unknown',
             betType,
             betDetails,
             amount: totalBetAmount,
             timestamp: new Date()
         };
+
+        // Validate bet object before adding
+        if (!bet.betType || !bet.userId || !bet.amount) {
+            console.error('Invalid bet object created:', bet);
+            return interaction.reply({
+                content: lang === 'en' 
+                    ? '❌ Error creating bet. Please try again.'
+                    : '❌ Lỗi tạo cược. Vui lòng thử lại.',
+                flags: MessageFlags.Ephemeral
+            });
+        }
 
         await session.updateOne({ $push: { bets: bet } });
 

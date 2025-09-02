@@ -197,15 +197,29 @@ module.exports = {
                 fetchReply: true
             });
 
-            // Create a new SicBo session for this guild
-            const session = new SicBoSession({
-                guildId,
-                channelId,
-                messageId: response.id,
-                isActive: true,
-                bets: []
-            });
-            await session.save();
+            // Look for existing session for this guild (active or inactive)
+            let session = await SicBoSession.findOne({ guildId });
+            
+            if (session) {
+                // Reuse existing session by resetting it
+                session.channelId = channelId;
+                session.messageId = response.id;
+                session.isActive = true;
+                session.bets.splice(0); // Clear the bets array properly
+                await session.save();
+                console.log(`Reusing existing session for guild ${guildId}`);
+            } else {
+                // Create a new session only if none exists
+                session = new SicBoSession({
+                    guildId,
+                    channelId,
+                    messageId: response.id,
+                    isActive: true,
+                    bets: []
+                });
+                await session.save();
+                console.log(`Created new session for guild ${guildId}`);
+            }
 
             // Start the 30-second betting timer with English language
             await startDiceAnimation(interaction, guildId, channelId, 'en', 30000);

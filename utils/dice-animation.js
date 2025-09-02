@@ -356,8 +356,8 @@ async function autoResolveDiceAnimation(guildId) {
         // Get the data we need before stopping animation
         const { diceMessage, countdownMessage, lang } = animationData;
         
-        // Disable betting buttons first (while we still have animation data)
-        await disableBettingButtons(guildId, lang);
+        // Remove betting buttons first (while we still have animation data)
+        await removeBettingButtons(guildId, lang);
         
         // Now stop animation
         stopDiceAnimation(guildId);
@@ -423,8 +423,24 @@ async function autoResolveDiceAnimation(guildId) {
         let totalWinnings = 0;
         const playerSummaries = new Map(); // Group by player
 
+        console.log(`Processing ${session.bets.length} bets for guild ${guildId}`);
+
         for (const bet of session.bets) {
             try {
+                // Add safety check for bet data
+                if (!bet || typeof bet !== 'object') {
+                    console.warn('Invalid bet object:', bet);
+                    continue;
+                }
+
+                // Ensure bet has required properties
+                if (!bet.betType) {
+                    console.warn('Bet missing betType:', bet);
+                    continue;
+                }
+
+                console.log(`Processing bet: ${bet.betType} by ${bet.userName} for ${bet.amount}`);
+
                 const payout = await calculatePayout(bet, finalDice);
                 const isWin = payout > 0;
                 
@@ -549,7 +565,10 @@ function formatComprehensiveResults(playerSummaries, lang) {
     const results = [];
     for (const [userId, playerData] of playerSummaries) {
         const betDescriptions = playerData.bets.map(bet => {
-            const betDesc = getBetDescription(bet.betType, bet.betDetails, lang);
+            // Add safety checks for bet data
+            const betType = bet.betType || 'unknown';
+            const betDetails = bet.betDetails;
+            const betDesc = getBetDescription(betType, betDetails, lang);
             const amount = bet.amount || 0;
             const payout = bet.payout || 0;
             
@@ -576,17 +595,23 @@ function formatComprehensiveResults(playerSummaries, lang) {
 }
 
 function getBetDescription(betType, value, lang) {
+    // Add safety check for undefined betType
+    if (!betType || typeof betType !== 'string') {
+        console.warn('Invalid betType in getBetDescription:', betType);
+        return lang === 'vi' ? 'Cược không xác định' : 'Unknown bet';
+    }
+
     const descriptions = {
         vi: {
-            big: 'Tài',
+            big: 'Tài', 
             small: 'Xỉu', 
-            odd: 'Lẻ',
+            odd: 'Lẻ', 
             even: 'Chẵn',
             total: value ? `Tổng ${value}` : 'Tổng'
         },
         en: {
-            big: 'Big',
-            small: 'Small',
+            big: 'Big', 
+            small: 'Small', 
             odd: 'Odd', 
             even: 'Even',
             total: value ? `Total ${value}` : 'Total'
@@ -603,9 +628,7 @@ function getBetDescription(betType, value, lang) {
     
     // Return description or fallback to betType with value
     return langData[betType] || (value ? `${betType} ${value}` : betType);
-}
-
-function getNumberCategory(sum) {
+}function getNumberCategory(sum) {
     if (sum >= 4 && sum <= 10) return 'small';
     if (sum >= 11 && sum <= 17) return 'big';
     return 'extreme'; // 3 or 18
@@ -641,9 +664,9 @@ function createGameInfoMessage(sum, lang, betResults, gameOutcomes) {
 }
 
 /**
- * Disable betting buttons on the original game message
+ * Remove betting buttons on the original game message
  */
-async function disableBettingButtons(guildId, lang) {
+async function removeBettingButtons(guildId, lang) {
     try {
         // Get animation data to access client
         const animationData = activeAnimations.get(guildId);
@@ -679,25 +702,15 @@ async function disableBettingButtons(guildId, lang) {
             return;
         }
 
-        // Create disabled versions of all components
-        const disabledComponents = message.components.map(row => {
-            const newRow = { ...row };
-            newRow.components = row.components.map(component => ({
-                ...component,
-                disabled: true
-            }));
-            return newRow;
-        });
-
-        // Update the message with disabled buttons
+        // Remove all components (buttons) completely
         await message.edit({
             embeds: message.embeds,
-            components: disabledComponents
+            components: []
         });
 
-        console.log(`Disabled betting buttons for guild ${guildId}`);
+        console.log(`Removed betting buttons for guild ${guildId}`);
     } catch (error) {
-        console.error('Error disabling betting buttons:', error);
+        console.error('Error removing betting buttons:', error);
     }
 }
 
