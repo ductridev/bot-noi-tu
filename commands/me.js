@@ -95,7 +95,7 @@ const meEmbed = async (interaction) => {
     const result = await getDataOfUser(userId, guildId, channelId);
     const lang = result?.language || 'vi';
 
-    const coins = await getCoins(guildId, userId);
+    const coins = await getCoins(userId);
 
     // 👇 Fetch total stats across all guilds/channels
     const globalStats = await getTotalPlayerStats(userId, lang);

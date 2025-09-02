@@ -4,7 +4,8 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    PermissionsBitField
+    PermissionsBitField,
+    MessageFlags
 } = require('discord.js');
 const ContributedWord = require('../models/ContributedWord');
 const DictionaryEntry = require('../models/DictionaryEntry');
@@ -83,6 +84,14 @@ module.exports = {
         ),
 
     async execute(interaction, client) {
+        // Check if word suggestions are enabled
+        if (process.env.ENABLE_WORD_SUGGESTIONS !== 'true') {
+            return interaction.reply({
+                content: 'Word suggestions are currently disabled.',
+                eflags: MessageFlags.Ephemeral
+            });
+        }
+
         const guildId = interaction.guildId;
         const channelId = interaction.channelId;
         const config = await GuildConfig.findOne({ guildId });
@@ -92,14 +101,14 @@ module.exports = {
         if (!REPORT_CHANNEL) {
             return interaction.reply({
                 content: t[lang].notEnabled,
-                ephemeral: true,
+                eflags: MessageFlags.Ephemeral,
             });
         }
 
         // if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
         //     return interaction.reply({
         //         content: t[lang].noPermission,
-        //         ephemeral: true,
+        //         eflags: MessageFlags.Ephemeral,
         //     });
         // }
 
@@ -112,14 +121,14 @@ module.exports = {
             if (wordParts.length !== 2) {
                 return interaction.reply({
                     content: t[lang].invalidPhrase,
-                    ephemeral: true,
+                    eflags: MessageFlags.Ephemeral,
                 });
             }
         } else if (lang === 'en') {
             if (wordParts.length !== 1) {
                 return interaction.reply({
                     content: t[lang].invalidPhrase,
-                    ephemeral: true,
+                    eflags: MessageFlags.Ephemeral,
                 });
             }
         }
@@ -127,13 +136,13 @@ module.exports = {
         if (await alreadyExists(word, lang)) {
             return interaction.reply({
                 content: t[lang].alreadyExists,
-                ephemeral: true,
+                eflags: MessageFlags.Ephemeral,
             });
         }
 
         await interaction.reply({
             content: t[lang].suggested(word),
-            ephemeral: true,
+            eflags: MessageFlags.Ephemeral,
         });
 
         const acceptButton = new ButtonBuilder()
@@ -166,7 +175,7 @@ module.exports = {
 
         collector.on('collect', async (i) => {
             if (!i.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-                return i.reply({ content: t[lang].notAllowed, ephemeral: true });
+                return i.reply({ content: t[lang].notAllowed, eflags: MessageFlags.Ephemeral });
             }
 
             let status;

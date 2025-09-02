@@ -65,6 +65,16 @@ const helpEmbed = () => new EmbedBuilder()
             inline: true
         },
         {
+            name: '🎲 Chơi Tài Xỉu (Sic Bo)',
+            value: 'Dùng lệnh `/sicbo` hoặc `/taixiu` để chơi game xúc xắc',
+            inline: true
+        },
+        {
+            name: '⚙️ Cấu hình Tài Xỉu',
+            value: 'Dùng lệnh `/sicbo-config` để xem/thay đổi tỷ lệ thắng',
+            inline: true
+        },
+        {
             name: ':robot: Invite',
             value: '[Invite bot](https://discord.com/oauth2/authorize?client_id=1397278127759298690)',
             inline: true
@@ -89,7 +99,7 @@ module.exports = {
     async execute(interaction) {
         await interaction.reply({
             embeds: [helpEmbed()],
-            flags: [4096]
+            flags: 4096
         })
     }
 }

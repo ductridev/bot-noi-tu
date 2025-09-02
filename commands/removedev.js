@@ -1,4 +1,4 @@
-const { SlashCommandBuilder } = require('discord.js');
+const { SlashCommandBuilder, MessageFlags } = require('discord.js');
 const Developer = require('../models/Developer');
 
 module.exports = {
@@ -11,11 +11,11 @@ module.exports = {
         const authorId = interaction.user.id;
 
         const isDev = await Developer.exists({ userId: authorId });
-        if (!isDev) return interaction.reply({ content: 'You are not authorized to do this.', ephemeral: true });
+        if (!isDev) return interaction.reply({ content: 'You are not authorized to do this.', flags: MessageFlags.Ephemeral });
 
         const user = interaction.options.getUser('user');
         await Developer.deleteOne({ userId: user.id });
 
-        await interaction.reply({ content: `${user.tag} is no longer a developer.`, ephemeral: true });
+        await interaction.reply({ content: `${user.tag} is no longer a developer.`, flags: MessageFlags.Ephemeral });
     }
 };

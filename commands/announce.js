@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder, ChannelType } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, ChannelType, MessageFlags } = require('discord.js');
 const Developer = require('../models/Developer');
 const GuildConfig = require('../models/GuildConfig');
 
@@ -26,7 +26,7 @@ module.exports = {
         if (!isDev) {
             return interaction.reply({
                 content: '🚫 Bạn không có quyền làm điều này.',
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -65,7 +65,7 @@ module.exports = {
 
         return interaction.reply({
             content: `✅ Đã gửi thông báo đến **${totalSent}** kênh${filterLanguage ? ` (language: ${filterLanguage})` : ''}.`,
-            ephemeral: true
+            flags: MessageFlags.Ephemeral
         });
     }
 };

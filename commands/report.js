@@ -5,6 +5,7 @@ const {
     ButtonBuilder,
     ButtonStyle,
     PermissionsBitField,
+    MessageFlags,
 } = require('discord.js');
 require('dotenv').config();
 
@@ -104,16 +105,9 @@ module.exports = {
         if (!REPORT_CHANNEL) {
             return interaction.reply({
                 content: t[lang].notEnabled,
-                ephemeral: true,
+                flags: MessageFlags.Ephemeral,
             });
         }
-
-        // if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-        //     return interaction.reply({
-        //         content: t[lang].noPermission,
-        //         ephemeral: true,
-        //     });
-        // }
 
         let word = interaction.options.getString('word');
         let reason = interaction.options.getString('reason') ?? 'No reason provided.';
@@ -123,27 +117,27 @@ module.exports = {
         if (wordParts.length !== 2) {
             return interaction.reply({
                 content: t[lang].invalidPhrase,
-                ephemeral: true,
+                eflags: MessageFlags.Ephemeral,
             });
         }
 
         if (!dictionary.checkWordIfInDictionary(word, lang)) {
             return interaction.reply({
                 content: t[lang].notInDict,
-                ephemeral: true,
+                eflags: MessageFlags.Ephemeral,
             });
         }
 
         if (await isInReportList(word, lang)) {
             return interaction.reply({
                 content: t[lang].alreadyReported,
-                ephemeral: true,
+                eflags: MessageFlags.Ephemeral,
             });
         }
 
         await interaction.reply({
             content: t[lang].reported(word),
-            ephemeral: true,
+            eflags: MessageFlags.Ephemeral,
         });
 
         const acceptButton = new ButtonBuilder()
@@ -176,7 +170,7 @@ module.exports = {
 
         collector.on('collect', async (i) => {
             if (!i.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
-                return i.reply({ content: t[lang].notAllowed, ephemeral: true });
+                return i.reply({ content: t[lang].notAllowed, eflags: MessageFlags.Ephemeral });
             }
 
             let status;

@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, ChannelType, PermissionsBitField } = require('discord.js');
+const { SlashCommandBuilder, ChannelType, PermissionsBitField, MessageFlags } = require('discord.js');
 const GuildConfig = require('../models/GuildConfig');
 
 const t = {
@@ -51,7 +51,7 @@ module.exports = {
         if (!interaction.member.permissions.has(PermissionsBitField.Flags.ManageGuild)) {
             return interaction.reply({
                 content: locale.noPermission,
-                ephemeral: true
+                flags: MessageFlags.Ephemeral
             });
         }
 
@@ -63,21 +63,21 @@ module.exports = {
         if (!botPermissions.has(PermissionsBitField.Flags.ViewChannel)) {
             return interaction.reply({
                 content: locale.noView,
-                ephemeral: true
+                eflags: MessageFlags.Ephemeral
             });
         }
 
         if (!botPermissions.has(PermissionsBitField.Flags.SendMessages)) {
             return interaction.reply({
                 content: locale.noSend,
-                ephemeral: true
+                eflags: MessageFlags.Ephemeral
             });
         }
 
         if (!botPermissions.has(PermissionsBitField.Flags.AddReactions)) {
             return interaction.reply({
                 content: locale.noReact,
-                ephemeral: true
+                eflags: MessageFlags.Ephemeral
             });
         }
 

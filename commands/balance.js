@@ -1,4 +1,4 @@
-const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
+const { SlashCommandBuilder, EmbedBuilder, MessageFlags } = require('discord.js');
 const GuildConfig = require('../models/GuildConfig');
 const { getCoins, getTotalCoins } = require('../utils/player');
 
@@ -33,6 +33,6 @@ module.exports = {
             .setTimestamp();
 
         // reply ephemerally
-        await interaction.reply({ embeds: [embed], ephemeral: true });
+        await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
     }
 };
