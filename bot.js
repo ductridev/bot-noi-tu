@@ -32,7 +32,8 @@ const BotStats = require('./models/BotStats');
 const dictionary = require('./utils/dictionary');
 const stats = require('./utils/stats')
 const player = require('./utils/player')
-const { setChannel } = require('./utils/channel')
+const { setChannel } = require('./utils/channel');
+const { withChannelLock } = require('./utils/lock');
 
 const client = new Client({
     intents: [
@@ -44,7 +45,6 @@ const client = new Client({
 
 // global config
 const START_COMMAND = '!start', STOP_COMMAND = '!stop', RESET_COMMAND = '!reset', PREFIX = '!';
-let queryCount = 0
 
 // We create a collection for commands
 client.commands = new Collection()
@@ -76,359 +76,383 @@ for (const file of eventFiles) {
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
 
-    // 1) load channel config and language
-    const config = await GuildConfig.findOne({ guildId: message.guild.id });
-    const channelCfg = config?.channels?.find(c => c.channelId === message.channel.id);
-    if (!channelCfg) return;
-    const language = channelCfg.language;
+    await withChannelLock(message.channel.id, async () => {
+        // 1) load channel config and language
+        const config = await GuildConfig.findOne({ guildId: message.guild.id });
+        const channelCfg = config?.channels?.find(c => c.channelId === message.channel.id);
+        if (!channelCfg) return;
+        const language = channelCfg.language;
 
-    const checkDict = async (word) => {
-        const lc = word.toLowerCase().trim();
-        // Vietnamese must be exactly two tokens; English exactly one
-        const parts = lc.split(/\s+/).filter(Boolean);
-        if (language === 'vi') {
-            if (parts.length !== 2) return false;
-        } else { // 'en'
-            if (parts.length !== 1) return false;
+        if (language === "en") {
+            // Not allow if only have 1 character
+            if (message.content.length < 2) return;
         }
 
-        // pass language to getReportWords
-        const blacklist = (await dictionary.getReportWords(language)).map(w => w.toLowerCase().trim());
+        const checkDict = async (word) => {
+            const lc = word.toLowerCase().trim();
+            // Vietnamese must be exactly two tokens; English exactly one
+            const parts = lc.split(/\s+/).filter(Boolean);
+            if (language === 'vi') {
+                if (parts.length !== 2) return false;
+            } else { // 'en'
+                if (parts.length !== 1) return false;
+            }
 
-        if (blacklist.includes(lc)) return false;
+            // pass language to getReportWords
+            const blacklist = (await dictionary.getReportWords(language)).map(w => w.toLowerCase().trim());
 
-        // filter by language
-        const exists =
-            await DictionaryEntry.exists({ text: lc, language }) ||
-            await ContributedWord.exists({ text: lc, language });
+            if (blacklist.includes(lc)) return false;
 
-        return !!exists;
-    };
+            // filter by language
+            const exists =
+                await DictionaryEntry.exists({ text: lc, language }) ||
+                await ContributedWord.exists({ text: lc, language });
 
-    const sendMessageToChannel = (msg, channel_id) => {
-        const ch = client.channels.cache.get(channel_id);
-        if (ch) ch.send({ content: msg, flags: [4096] });
-    };
-
-    const sendAutoDeleteMessageToChannel = (msg, channel_id, seconds = 3) => {
-        const ch = client.channels.cache.get(channel_id);
-        if (ch) ch.send({ content: msg, flags: [4096] })
-            .then(m => setTimeout(() => m.delete().catch(() => { }), 1000 * seconds));
-    };
-
-    const checkIfHaveAnswer = async (word, usedWords = []) => {
-        let regex;
-        if (language === 'vi') {
-            // Vietnamese: last word ➞ first word
-            const parts = word.split(' ');
-            const last = parts[parts.length - 1];
-            regex = new RegExp(`^${last} `, 'i');
-        } else {
-            // English: last letter ➞ first letter
-            const lastChar = word.slice(-1);
-            regex = new RegExp(`^${lastChar}`, 'i');
-        }
-
-        // filter by language
-        const match = await DictionaryEntry.findOne({ text: { $regex: regex }, language }) ||
-            await ContributedWord.findOne({ text: { $regex: regex }, language });
-
-        if (!match) return false;
-        return !usedWords.includes(match.text);
-    };
-
-    const randomWord = async () => {
-        const blacklist = (await dictionary.getReportWords(language)).map(w => w.toLowerCase().trim());
-
-        // For Vietnamese pick two-word entries; for English pick single words
-        const filter = {
-            text: { $nin: blacklist },
-            language
+            return !!exists;
         };
 
-        if (language === 'vi') {
-            filter.text.$regex = /^\w+ \w+$/i;
-        } else {
-            filter.text.$regex = /^\w+$/i;
-        }
+        const sendMessageToChannel = (msg, channel_id) => {
+            const ch = client.channels.cache.get(channel_id);
+            if (ch) ch.send({ content: msg, flags: [4096] });
+        };
 
-        const count = await DictionaryEntry.countDocuments(filter);
+        const sendAutoDeleteMessageToChannel = (msg, channel_id, seconds = 3) => {
+            const ch = client.channels.cache.get(channel_id);
+            if (ch) ch.send({ content: msg, flags: [4096] })
+                .then(m => setTimeout(() => m.delete().catch(() => { }), 1000 * seconds));
+        };
 
-        let attempt = 0;
-        while (attempt < 10) {
-            const rand = Math.floor(Math.random() * count);
-            const [word] = await DictionaryEntry.find(filter).skip(rand).limit(1);
+        const checkIfHaveAnswer = async (word, usedWords = []) => {
+            let regex;
+            if (language === 'vi') {
+                // Vietnamese: last word ➞ first word
+                const parts = word.split(' ');
+                const last = parts[parts.length - 1];
+                    // Only match 2-word entries
+                    regex = new RegExp(`^${last} [^\s]+$`, 'i');
+            } else {
+                // English: last letter ➞ first letter
+                const lastChar = word.slice(-1);
+                regex = new RegExp(`^${lastChar}`, 'i');
+            }
 
-            if (!word) continue;
+                // filter by language and ensure only 2-word entries for Vietnamese
+                let match;
+                if (language === 'vi') {
+                    match = await DictionaryEntry.findOne({ text: { $regex: regex }, language }) ||
+                        await ContributedWord.findOne({ text: { $regex: regex }, language });
+                    // If no valid 2-word entry left, return a special value
+                    if (!match) return null;
+                    return !usedWords.includes(match.text);
+                } else {
+                    match = await DictionaryEntry.findOne({ text: { $regex: regex }, language }) ||
+                        await ContributedWord.findOne({ text: { $regex: regex }, language });
+                    if (!match) return false;
+                    return !usedWords.includes(match.text);
+                }
+        };
 
-            const has = await checkIfHaveAnswer(word.text);
-            if (has) return word.text;
+        const randomWord = async () => {
+            const blacklist = (await dictionary.getReportWords(language)).map(w => w.toLowerCase().trim());
 
-            attempt++;
-        }
-
-        return await randomWord();
-    };
-
-    const startGame = async (guildId, channelId) => {
-        const word = await randomWord();
-        await GameSession.findOneAndUpdate(
-            { guildId, channelId, language },      // include language
-            {
-                running: true,
-                words: [word],
-                currentPlayer: {},
-                playerStats: [],
+            // For Vietnamese pick two-word entries; for English pick single words
+            const filter = {
+                text: { $nin: blacklist },
                 language
-            },
-            { upsert: true }
-        );
-        sendMessageToChannel(`Từ bắt đầu: **${word}**`, channelId);
-    };
+            };
 
-    const initWordData = async (guild, channel) => {
-        await GameSession.findOneAndUpdate(
-            { guildId: guild, channelId: channel, language },   // include language
-            { running: false, currentPlayer: {}, words: [], language },
-            { upsert: true }
-        );
-    };
+            if (language === 'vi') {
+                filter.text.$regex = /^\w+ \w+$/i;
+            } else {
+                filter.text.$regex = /^\w+$/i;
+            }
 
-    const updateRankingForUser = async (userId, newWin, newTrue, newTotal, guildId, name, avatar) => {
-        // include channelId & language in your filter
-        const rank = await Ranking.findOne({
-            guildId,
-            channelId: message.channel.id,
-            language
-        });
-        if (!rank) {
-            const newRank = new Ranking({
+            const count = await DictionaryEntry.countDocuments(filter);
+
+            let attempt = 0;
+            while (attempt < 10) {
+                const rand = Math.floor(Math.random() * count);
+                const [word] = await DictionaryEntry.find(filter).skip(rand).limit(1);
+
+                if (!word) continue;
+
+                const has = await checkIfHaveAnswer(word.text);
+                if (has) return word.text;
+
+                attempt++;
+            }
+
+            return await randomWord();
+        };
+
+        const startGame = async (guildId, channelId, language) => {
+            const word = await randomWord();
+            await GameSession.findOneAndUpdate(
+                { guildId, channelId, language },      // include language
+                {
+                    running: true,
+                    words: [word],
+                    currentPlayer: {},
+                    playerStats: [],
+                    language
+                },
+                { upsert: true }
+            );
+            sendMessageToChannel(`Từ bắt đầu: **${word}**`, channelId);
+        };
+
+        const initWordData = async (guild, channel, language) => {
+            await GameSession.findOneAndUpdate(
+                { guildId: guild, channelId: channel, language },   // include language
+                { running: false, currentPlayer: {}, words: [], language },
+                { upsert: true }
+            );
+        };
+
+        const updateRankingForUser = async (userId, newWin, newTrue, newTotal, guildId, name, avatar) => {
+            // include channelId & language in your filter
+            const rank = await Ranking.findOne({
                 guildId,
                 channelId: message.channel.id,
-                language,
-                players: [{ id: userId, name, avatar, win: newWin, total: newTotal, true: newTrue }]
+                language
             });
-            await newRank.save();
+            if (!rank) {
+                const newRank = new Ranking({
+                    guildId,
+                    channelId: message.channel.id,
+                    language,
+                    players: [{ id: userId, name, avatar, win: newWin, total: newTotal, true: newTrue }]
+                });
+                await newRank.save();
+                return;
+            }
+
+            let player = rank.players.find(p => p.id === userId);
+            if (!player) {
+                player = { id: userId, name, avatar, win: newWin, total: newTotal, true: newTrue };
+                rank.players.push(player);
+            } else {
+                player.win += newWin;
+                player.true += newTrue;
+                player.total += newTotal;
+                player.name = name;
+                player.avatar = avatar;
+            }
+
+            await rank.save();
+        };
+
+        // ensure this channel is registered
+        const configEntry = await GuildConfig.findOne({ guildId: message.guild.id });
+        if (!configEntry?.channels?.some(c => c.channelId === message.channel.id)) return;
+
+        // Handle prefix commands
+        if (message.content.startsWith(PREFIX)) {
+            const arg = message.content.trim().split(/\s+/)[1];
+            if (arg === 'set') {
+                if (!message.member.permissionsIn(message.channel.id).has(PermissionsBitField.Flags.ManageGuild)) {
+                    return message.reply({ content: 'Bạn cần có quyền `MANAGE_GUILD` để dùng lệnh này', ephemeral: true });
+                }
+                // pass language when saving channel
+                await setChannel(message.guildId, message.channel.id, language);
+                return message.reply({
+                    content: `Đã chọn kênh **${message.channel.name}** làm kênh trò chơi (${language}).`,
+                    ephemeral: true
+                });
+            }
+        }
+
+        if (message.content.includes("bot") && message.content.includes("ngu")) {
+            sendMessageToChannel(`<@${message.author.id}> mày mới ngu thì có đó nhóc ác`, message.channel.id);
             return;
         }
 
-        let player = rank.players.find(p => p.id === userId);
-        if (!player) {
-            player = { id: userId, name, avatar, win: newWin, total: newTotal, true: newTrue };
-            rank.players.push(player);
-        } else {
-            player.win += newWin;
-            player.true += newTrue;
-            player.total += newTotal;
-            player.name = name;
-            player.avatar = avatar;
+        // load or init session with language
+        let session = await GameSession.findOne({
+            guildId: message.guild.id,
+            channelId: message.channel.id,
+            language
+        });
+        if (!session) {
+            await initWordData(message.guild.id, message.channel.id, language);
+            session = await GameSession.findOne({ guildId: message.guild.id, channelId: message.channel.id, language });
         }
 
-        await rank.save();
-    };
+        let isRunning = session?.running ?? false;
 
-    // ensure this channel is registered
-    const configEntry = await GuildConfig.findOne({ guildId: message.guild.id });
-    if (!configEntry?.channels?.some(c => c.channelId === message.channel.id)) return;
-
-    // Handle prefix commands
-    if (message.content.startsWith(PREFIX)) {
-        const arg = message.content.trim().split(/\s+/)[1];
-        if (arg === 'set') {
-            if (!message.member.permissionsIn(message.channel.id).has(PermissionsBitField.Flags.ManageGuild)) {
-                return message.reply({ content: 'Bạn cần có quyền `MANAGE_GUILD` để dùng lệnh này', ephemeral: true });
+        if (message.content.toLowerCase() === START_COMMAND.toLowerCase()) {
+            if (!isRunning) {
+                sendMessageToChannel('Trò chơi đã bắt đầu!', message.channel.id);
+                await startGame(message.guild.id, message.channel.id, language);
+            } else {
+                sendMessageToChannel('Trò chơi vẫn đang tiếp tục. Bạn có thể dùng `!stop`', message.channel.id);
             }
-            // pass language when saving channel
-            await setChannel(message.guildId, message.channel.id, language);
-            return message.reply({
-                content: `Đã chọn kênh **${message.channel.name}** làm kênh trò chơi (${language}).`,
-                ephemeral: true
-            });
+            return;
+        } else if (['!stop', '!reset'].includes(message.content.toLowerCase())) {
+            // if (!message.member.permissionsIn(message.channel.id).has(PermissionsBitField.Flags.ManageChannels)) {
+            //     return message.reply({ content: 'Bạn không có quyền dùng lệnh này', ephemeral: true });
+            // }
+
+            if (isRunning) {
+                sendMessageToChannel('Đã kết thúc lượt này! Lượt mới đã bắt đầu!', message.channel.id);
+                await initWordData(message.guild.id, message.channel.id, language);
+                // pass language here
+                await stats.addRoundPlayedCount(language);
+                await startGame(message.guild.id, message.channel.id, language);
+            } else {
+                sendMessageToChannel('Trò chơi chưa bắt đầu. Bạn có thể dùng `!start`', message.channel.id);
+            }
+            return;
         }
-    }
 
-    // load or init session with language
-    let session = await GameSession.findOne({
-        guildId: message.guild.id,
-        channelId: message.channel.id,
-        language
-    });
-    if (!session) {
-        await initWordData(message.guild.id, message.channel.id);
-        session = await GameSession.findOne({ guildId: message.guild.id, channelId: message.channel.id, language });
-    }
+        if (!isRunning) return;
 
-    let isRunning = session?.running ?? false;
+        let tu = message.content.trim().toLowerCase();
+        const args1 = tu.split(/\s+/).filter(Boolean);
+        tu = args1.join(' ');
 
-    if (message.content.toLowerCase() === START_COMMAND.toLowerCase()) {
-        if (!isRunning) {
-            sendMessageToChannel('Trò chơi đã bắt đầu!', message.channel.id);
-            await startGame(message.guild.id, message.channel.id);
-        } else {
-            sendMessageToChannel('Trò chơi vẫn đang tiếp tục. Bạn có thể dùng `!stop`', message.channel.id);
-        }
-        return;
-    } else if (['!stop', '!reset'].includes(message.content.toLowerCase())) {
-        // if (!message.member.permissionsIn(message.channel.id).has(PermissionsBitField.Flags.ManageChannels)) {
-        //     return message.reply({ content: 'Bạn không có quyền dùng lệnh này', ephemeral: true });
-        // }
+        const words = session.words || [];
+        const lastPlayerId = session.currentPlayer?.id;
 
-        if (isRunning) {
-            sendMessageToChannel('Đã kết thúc lượt này! Lượt mới đã bắt đầu!', message.channel.id);
-            await initWordData(message.guild.id, message.channel.id);
-            // pass language here
-            await stats.addRoundPlayedCount(language);
-            await startGame(message.guild.id, message.channel.id);
-        } else {
-            sendMessageToChannel('Trò chơi chưa bắt đầu. Bạn có thể dùng `!start`', message.channel.id);
-        }
-        return;
-    }
-
-    if (!isRunning) return;
-
-    let tu = message.content.trim().toLowerCase();
-    const args1 = tu.split(/\s+/).filter(Boolean);
-    tu = args1.join(' ');
-
-    const words = session.words || [];
-    const lastPlayerId = session.currentPlayer?.id;
-
-    if (language === 'vi') {
-        if (args1.length !== 2) return;
-    } else {  // language === 'en'
-        if (args1.length !== 1) return;
-    }
-
-    if (words.length > 0 && message.author.id === lastPlayerId) {
-        message.react('❌');
-        sendAutoDeleteMessageToChannel('Bạn đã trả lời lượt trước rồi, hãy đợi đối thủ!', message.channel.id);
-        return;
-    }
-
-    const lastWord = words[words.length - 1];
-    if (lastWord) {
         if (language === 'vi') {
-            // Vietnamese: last word ➞ first word
-            const expected = lastWord.split(/\s+/).pop();
-            if (args1[0] !== expected) {
-                message.react('❌');
-                sendAutoDeleteMessageToChannel(
-                    `Từ này không bắt đầu với tiếng \`${expected}\``,
-                    message.channel.id
-                );
-                return;
-            }
-        } else {
-            // English: last letter ➞ first letter
-            const expectedChar = lastWord.slice(-1);
-            if (args1[0].charAt(0) !== expectedChar) {
-                message.react('❌');
-                sendAutoDeleteMessageToChannel(
-                    `Word must start with \`${expectedChar}\``,
-                    message.channel.id
-                );
-                return;
+            if (args1.length !== 2) return;
+        } else {  // language === 'en'
+            if (args1.length !== 1) return;
+        }
+
+        if (words.length > 0 && message.author.id === lastPlayerId) {
+            message.react('❌');
+            sendAutoDeleteMessageToChannel('Bạn đã trả lời lượt trước rồi, hãy đợi đối thủ!', message.channel.id);
+            return;
+        }
+
+        const lastWord = words[words.length - 1];
+        if (lastWord) {
+            if (language === 'vi') {
+                // Vietnamese: last word ➞ first word
+                const expected = lastWord.split(/\s+/).pop();
+                if (args1[0] !== expected) {
+                    message.react('❌');
+                    sendAutoDeleteMessageToChannel(
+                        `Từ này không bắt đầu với tiếng \`${expected}\``,
+                        message.channel.id
+                    );
+                    return;
+                }
+            } else {
+                // English: last letter ➞ first letter
+                const expectedChar = lastWord.slice(-1);
+                if (args1[0].charAt(0) !== expectedChar) {
+                    message.react('❌');
+                    sendAutoDeleteMessageToChannel(
+                        `Word must start with \`${expectedChar}\``,
+                        message.channel.id
+                    );
+                    return;
+                }
             }
         }
-    }
 
-    if (words.includes(tu)) {
-        message.react('❌');
-        sendAutoDeleteMessageToChannel('Từ này đã được sử dụng!', message.channel.id);
-        return;
-    }
+        if (words.includes(tu)) {
+            message.react('❌');
+            sendAutoDeleteMessageToChannel('Từ này đã được sử dụng!', message.channel.id);
+            return;
+        }
 
-    if (!(await checkDict(tu))) {
-        message.react('❌');
+        if (!(await checkDict(tu))) {
+            message.react('❌');
+            await updateRankingForUser(
+                message.author.id, 0, 0, 1,
+                message.guild.id,
+                message.author.displayName,
+                message.author.avatarURL() || "https://raw.githubusercontent.com/ductridev/multi-distube-bots/refs/heads/master/assets/img/bot-avatar-1.jpg"
+            );
+            return;
+        }
+
+        words.push(tu);
+
+        message.react('✅');
+        // pass language
+        await stats.addWordPlayedCount(language);
         await updateRankingForUser(
-            message.author.id, 0, 0, 1,
+            message.author.id, 0, 1, 1,
             message.guild.id,
             message.author.displayName,
-            message.author.avatarURL()
+            message.author.avatarURL() || "https://raw.githubusercontent.com/ductridev/multi-distube-bots/refs/heads/master/assets/img/bot-avatar-1.jpg"
         );
-        return;
-    }
 
-    words.push(tu);
-    session.words = words;
-    session.currentPlayer = { id: message.author.id, name: message.author.displayName };
-    await session.save();
+        session.words = words;
+        session.currentPlayer = { id: message.author.id, name: message.author.displayName };
+        session.markModified('words');
+        session.markModified('currentPlayer');
 
-    message.react('✅');
-    // pass language
-    await stats.addWordPlayedCount(language);
-    await updateRankingForUser(
-        message.author.id, 0, 1, 1,
-        message.guild.id,
-        message.author.displayName,
-        message.author.avatarURL()
-    );
+        if (language === 'en') {
+            // Ensure playerStats is initialized
+            if (!session.playerStats) {
+                session.playerStats = [];
+            }
 
-    if (language === 'en') {
-        // Ensure playerStats is initialized
-        if (!session.playerStats) {
-            session.playerStats = [];
+            let stat = session.playerStats.find(p => p.id === message.author.id);
+            if (!stat) {
+                stat = {
+                    id: message.author.id,
+                    name: message.member.displayName,
+                    correctCount: 1
+                };
+                session.playerStats.push(stat);
+            } else {
+                stat.correctCount += 1;
+            }
+
+            session.markModified('playerStats');
+
+            // Check win condition
+            if (stat.correctCount >= 50) {
+                sendMessageToChannel(`${message.author.tag} đã chiến thắng sau khi trả lời đúng 50 từ tiếng Anh và nhận được 100 xu! Lượt mới đã bắt đầu!`, message.channel.id);
+
+                await updateRankingForUser(
+                    message.author.id, 1, 0, 0,
+                    message.guild.id,
+                    message.author.displayName,
+                    message.author.avatarURL() || "https://raw.githubusercontent.com/ductridev/multi-distube-bots/refs/heads/master/assets/img/bot-avatar-1.jpg"
+                );
+
+                await stats.addRoundPlayedCount(language);
+                await initWordData(message.guild.id, message.channel.id, language);
+                await startGame(message.guild.id, message.channel.id, language);
+                await player.changeCoins(message.guild.id, message.author.id, 100);
+                return;
+            }
         }
 
-        let stat = session.playerStats.find(p => p.id === message.author.id);
-        if (!stat) {
-            stat = {
-                id: message.author.id,
-                name: message.member.displayName,
-                correctCount: 1
-            };
-            session.playerStats.push(stat);
-        } else {
-            stat.correctCount += 1;
-        }
-
-        // ✅ Tell Mongoose the array was modified
-        session.markModified('playerStats');
         await session.save();
 
-        // Check win condition
-        if (stat.correctCount >= 50) {
-            sendMessageToChannel(`${message.author.tag} đã chiến thắng sau khi trả lời đúng 50 từ tiếng Anh và nhận được 100 xu! Lượt mới đã bắt đầu!`, message.channel.id);
+        const hasAnswer = await checkIfHaveAnswer(tu, words || []);
 
+        // For Vietnamese, if no valid 2-word entry left, restart the game
+        if ((language === 'vi' && hasAnswer === null) || (language !== 'vi' && !hasAnswer)) {
+            sendMessageToChannel(`${message.author.tag} đã chiến thắng sau ${words.length - 1} lượt và nhận được 100 xu! Lượt mới đã bắt đầu!`, message.channel.id);
             await updateRankingForUser(
                 message.author.id, 1, 0, 0,
                 message.guild.id,
                 message.author.displayName,
-                message.author.avatarURL()
+                message.author.avatarURL() || "https://raw.githubusercontent.com/ductridev/multi-distube-bots/refs/heads/master/assets/img/bot-avatar-1.jpg"
             );
-
+            // pass language
             await stats.addRoundPlayedCount(language);
-            await initWordData(message.guild.id, message.channel.id);
-            await startGame(message.guild.id, message.channel.id);
+            await initWordData(message.guild.id, message.channel.id, language);
+            await startGame(message.guild.id, message.channel.id, language);
             await player.changeCoins(message.guild.id, message.author.id, 100);
             return;
         }
-    }
 
-    const hasAnswer = await checkIfHaveAnswer(tu, session.words || []);
+        // Increase 10 coins if not end yet
+        await player.changeCoins(message.guild.id, message.author.id, 10);
 
-    if (!hasAnswer) {
-        sendMessageToChannel(`${message.author.tag} đã chiến thắng sau ${words.length - 1} lượt và nhận được 100 xu! Lượt mới đã bắt đầu!`, message.channel.id);
-        await updateRankingForUser(
-            message.author.id, 1, 0, 0,
-            message.guild.id,
-            message.author.displayName,
-            message.author.avatarURL()
-        );
         // pass language
-        await stats.addRoundPlayedCount(language);
-        await initWordData(message.guild.id, message.channel.id);
-        await startGame(message.guild.id, message.channel.id);
-        await player.changeCoins(message.guild.id, message.author.id, 100);
-        return;
-    }
-
-    // Increase 10 coins if not end yet
-    await player.changeCoins(message.guild.id, message.author.id, 10);
-
-    // pass language
-    await stats.addQuery(language);
+        await stats.addQuery(language);
+    });
 });
 // END LOGIC GAME
 
