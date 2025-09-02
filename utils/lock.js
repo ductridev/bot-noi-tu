@@ -1,4 +1,4 @@
-export const channelLocks = new Map();
+const channelLocks = new Map();
 
 /**
  * Wait until the current lock (if any) is released, then acquire it.
@@ -23,6 +23,7 @@ const withChannelLock = async (channelId, fn) => {
     }
 };
 
-export {
-    withChannelLock
+module.exports = {
+    channelLocks,
+    withChannelLock,
 };
