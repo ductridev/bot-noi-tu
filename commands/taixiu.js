@@ -65,14 +65,6 @@ module.exports = {
             const embed = new EmbedBuilder()
                 .setColor(0x00AE86)
                 .setTitle('🎲 Tài Xỉu - Trò chơi xúc xắc')
-                .setDescription(
-                    '**Cách chơi:**\n' +
-                    '• **Tài** (11-17): Tổng lớn, trừ ba số giống nhau\n' +
-                    '• **Xỉu** (4-10): Tổng nhỏ, trừ ba số giống nhau\n' +
-                    '• **Lẻ**: Tổng là số lẻ\n' +
-                    '• **Chẵn**: Tổng là số chẵn\n' +
-                    '• **Tổng**: Đoán chính xác tổng điểm (3-18)'
-                )
                 .addFields(
                     { 
                         name: '💰 Tỷ lệ thắng', 
@@ -94,11 +86,11 @@ module.exports = {
                 .addComponents(
                     new ButtonBuilder()
                         .setCustomId('sicbo_big')
-                        .setLabel('🔺 Tài')
+                        .setLabel('🔺 Tài (11-17)')
                         .setStyle(ButtonStyle.Success),
                     new ButtonBuilder()
                         .setCustomId('sicbo_small')
-                        .setLabel('🔻 Xỉu')
+                        .setLabel('🔻 Xỉu (4-10)')
                         .setStyle(ButtonStyle.Danger),
                     new ButtonBuilder()
                         .setCustomId('sicbo_odd')
