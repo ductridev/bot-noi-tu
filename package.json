@@ -1,12 +1,25 @@
 {
   "name": "bot-noi-tu",
   "version": "1.0.0",
-  "description": "Vietnamese-English word-chain BOT on Discord!",
+  "description": "Feature-rich Discord bot with Vietnamese/English word-chain games, Sic Bo gambling, statistics tracking, and multilingual support",
   "main": "bot.js",
   "scripts": {
     "start": "node bot.js",
+    "dev": "node bot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
+  "keywords": [
+    "discord-bot",
+    "vietnamese",
+    "english", 
+    "word-game",
+    "gambling",
+    "sic-bo",
+    "dice-game",
+    "multilingual",
+    "node.js",
+    "mongodb"
+  ],
   "repository": {
     "type": "git",
     "url": "https://github.com/ductridev/bot-noi-tu.git"

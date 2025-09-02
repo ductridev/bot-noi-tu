@@ -11,7 +11,7 @@ process.on('SIGINT', handleExit);
 process.on('SIGTERM', handleExit);
 process.on('SIGQUIT', handleExit);
 
-const { Client, GatewayIntentBits, Collection, PermissionsBitField } = require('discord.js')
+const { Client, GatewayIntentBits, Collection, PermissionsBitField, MessageFlags } = require('discord.js')
 const fs = require('fs')
 require('dotenv').config()
 
@@ -54,7 +54,26 @@ const commandFiles = fs
 
 for (const file of commandFiles) {
     const command = require(`./commands/${file}`)
-    client.commands.set(command.data.name, command)
+    
+    // Conditionally load commands based on environment variables
+    let shouldLoad = true;
+    
+    // Check Sic Bo commands
+    if ((file === 'sicbo.js' || file === 'sicbo-config.js') && process.env.ENABLE_SICBO !== 'true') {
+        shouldLoad = false;
+        console.log(`[SKIP] Sic Bo command ${file} disabled by ENABLE_SICBO=false`);
+    }
+    
+    // Check word suggestion command
+    if (file === 'them-tu.js' && process.env.ENABLE_WORD_SUGGESTIONS !== 'true') {
+        shouldLoad = false;
+        console.log(`[SKIP] Word suggestions command ${file} disabled by ENABLE_WORD_SUGGESTIONS=false`);
+    }
+    
+    if (shouldLoad) {
+        client.commands.set(command.data.name, command)
+        console.log(`[LOAD] Command ${command.data.name} loaded from ${file}`);
+    }
 }
 
 // Events like ready.js (when the robot turns on), 
@@ -75,6 +94,9 @@ for (const file of eventFiles) {
 // LOGIC GAME
 client.on('messageCreate', async message => {
     if (message.author.bot) return;
+
+    // Check if word chain game is enabled
+    if (process.env.ENABLE_WORD_CHAIN !== 'true') return;
 
     await withChannelLock(message.channel.id, async () => {
         // 1) load channel config and language
@@ -251,13 +273,13 @@ client.on('messageCreate', async message => {
             const arg = message.content.trim().split(/\s+/)[1];
             if (arg === 'set') {
                 if (!message.member.permissionsIn(message.channel.id).has(PermissionsBitField.Flags.ManageGuild)) {
-                    return message.reply({ content: 'Bạn cần có quyền `MANAGE_GUILD` để dùng lệnh này', ephemeral: true });
+                    return message.reply({ content: 'Bạn cần có quyền `MANAGE_GUILD` để dùng lệnh này', flags: MessageFlags.Ephemeral });
                 }
                 // pass language when saving channel
                 await setChannel(message.guildId, message.channel.id, language);
                 return message.reply({
                     content: `Đã chọn kênh **${message.channel.name}** làm kênh trò chơi (${language}).`,
-                    ephemeral: true
+                    flags: MessageFlags.Ephemeral
                 });
             }
         }
@@ -289,9 +311,6 @@ client.on('messageCreate', async message => {
             }
             return;
         } else if (['!stop', '!reset'].includes(message.content.toLowerCase())) {
-            // if (!message.member.permissionsIn(message.channel.id).has(PermissionsBitField.Flags.ManageChannels)) {
-            //     return message.reply({ content: 'Bạn không có quyền dùng lệnh này', ephemeral: true });
-            // }
 
             if (isRunning) {
                 sendMessageToChannel('Đã kết thúc lượt này! Lượt mới đã bắt đầu!', message.channel.id);
@@ -421,7 +440,7 @@ client.on('messageCreate', async message => {
                 await stats.addRoundPlayedCount(language);
                 await initWordData(message.guild.id, message.channel.id, language);
                 await startGame(message.guild.id, message.channel.id, language);
-                await player.changeCoins(message.guild.id, message.author.id, 100);
+                await player.changeCoins(message.author.id, 100);
                 return;
             }
         }
@@ -443,12 +462,12 @@ client.on('messageCreate', async message => {
             await stats.addRoundPlayedCount(language);
             await initWordData(message.guild.id, message.channel.id, language);
             await startGame(message.guild.id, message.channel.id, language);
-            await player.changeCoins(message.guild.id, message.author.id, 100);
+            await player.changeCoins(message.author.id, 100);
             return;
         }
 
         // Increase 10 coins if not end yet
-        await player.changeCoins(message.guild.id, message.author.id, 10);
+        await player.changeCoins(message.author.id, 10);
 
         // pass language
         await stats.addQuery(language);
@@ -458,25 +477,45 @@ client.on('messageCreate', async message => {
 
 // The interactionCreate event directly here, as this is the heart of the robot.
 client.on('interactionCreate', async (interaction) => {
-    if (!interaction.isCommand()) return
-    const command = client.commands.get(interaction.commandName)
-    if (!command) return
+    // Handle slash commands
+    if (interaction.isChatInputCommand()) {
+        const command = client.commands.get(interaction.commandName)
+        if (!command) return
 
-    // We log when a user makes a command
-    try {
-        await console.log(
-            `[${interaction.guild.name}] ${interaction.user.username} used /${interaction.commandName}`
-        )
-        await command.execute(interaction, client)
-        // But if there is a mistake, 
-        // then we log that and send an error message only to the person (ephemeral: true)
-    } catch (error) {
-        console.error(error)
-        return interaction.reply({
-            content: "An error occurred while executing this command!",
-            ephemeral: true,
-            fetchReply: true
-        })
+        // We log when a user makes a command
+        try {
+            if (interaction.guild) {
+                await console.log(
+                    `[${interaction.guild.name}] ${interaction.user.username} used /${interaction.commandName}`
+                )
+            }
+            await command.execute(interaction, client)
+        } catch (error) {
+            console.error(error)
+            return interaction.reply({
+                content: "An error occurred while executing this command!",
+                flags: 4096,
+                withResponse: true
+            })
+        }
+    }
+    // Handle Sic Bo button interactions
+    else if (interaction.isButton() && interaction.customId.startsWith('sicbo_')) {
+        try {
+            const { handleSicBoButton } = require('./utils/sicbo-handlers');
+            await handleSicBoButton(interaction);
+        } catch (error) {
+            console.error('Error handling Sic Bo button:', error);
+        }
+    }
+    // Handle Sic Bo modal submissions
+    else if (interaction.isModalSubmit() && interaction.customId.startsWith('sicbo_modal_')) {
+        try {
+            const { handleSicBoModal } = require('./utils/sicbo-handlers');
+            await handleSicBoModal(interaction);
+        } catch (error) {
+            console.error('Error handling Sic Bo modal:', error);
+        }
     }
 })
 
