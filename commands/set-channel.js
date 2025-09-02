@@ -90,9 +90,9 @@ module.exports = {
                 channels: [{ channelId: channel.id, language: selectedLang }]
             });
         } else {
-            const existingIndex = config.channels.findIndex(c => c.channelId === channel.id);
+            const existingIndex = config.channels.findIndex(c => c.language === selectedLang);
             if (existingIndex !== -1) {
-                config.channels[existingIndex].language = selectedLang;
+                config.channels[existingIndex].channelId = channel.id;
             } else {
                 config.channels.push({ channelId: channel.id, language: selectedLang });
             }

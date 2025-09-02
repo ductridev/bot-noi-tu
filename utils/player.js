@@ -25,6 +25,16 @@ async function getCoins(guildId, userId) {
 }
 
 /**
+ * Sum total coins of a user across all guilds
+ * @param {string} userId
+ * @returns {Promise<number>}
+ */
+async function getTotalCoins(userId) {
+    const all = await PlayerData.find({ userId });
+    return all.reduce((sum, entry) => sum + (entry.coins || 0), 0);
+}
+
+/**
  * Adds (or subtracts) coins.  
  * @param {string} guildId 
  * @param {string} userId 
@@ -113,5 +123,6 @@ module.exports = {
     addGamePlayed,
     addGameWin,
     addGameLoss,
-    getGameStats
+    getGameStats,
+    getTotalCoins
 };

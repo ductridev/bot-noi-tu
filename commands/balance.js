@@ -1,6 +1,6 @@
 const { SlashCommandBuilder, EmbedBuilder } = require('discord.js');
 const GuildConfig = require('../models/GuildConfig');
-const { getCoins } = require('../utils/player');
+const { getCoins, getTotalCoins } = require('../utils/player');
 
 module.exports = {
     data: new SlashCommandBuilder()
@@ -17,8 +17,8 @@ module.exports = {
         const channelCfg = cfg?.channels?.find(c => c.channelId === channelId);
         const lang = channelCfg?.language || 'vi';
 
-        // 2) fetch coin balance
-        const coins = await getCoins(guildId, userId);
+        // 2) fetch total coin balance across all guilds
+        const coins = await getTotalCoins(userId);
 
         // 3) build embed
         const embed = new EmbedBuilder()
@@ -26,10 +26,10 @@ module.exports = {
             .setTitle(lang === 'en' ? 'Your Balance' : 'Số xu của bạn')
             .setDescription(
                 lang === 'en'
-                    ? `You have **${coins}** coins.`
-                    : `Bạn có **${coins}** xu.`
+                    ? `You have **${coins}** coins across all servers.`
+                    : `Bạn có **${coins}** xu ở tất cả các máy chủ.`
             )
-            .setThumbnail(interaction.user.avatarURL())
+            .setThumbnail(interaction.user.avatarURL() || "https://raw.githubusercontent.com/ductridev/multi-distube-bots/refs/heads/master/assets/img/bot-avatar-1.jpg")
             .setTimestamp();
 
         // reply ephemerally

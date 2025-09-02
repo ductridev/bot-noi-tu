@@ -13,7 +13,7 @@ module.exports = {
         // We add a name and iconURL to it, and then modify it with the values.
         const PingBeforeEmbed = new EmbedBuilder().setAuthor({
             name: `Đang kiểm tra ping...`,
-            iconURL: client.user.avatarURL()
+            iconURL: client.user.avatarURL() || "https://raw.githubusercontent.com/ductridev/multi-distube-bots/refs/heads/master/assets/img/bot-avatar-1.jpg"
         })
         const sent = await interaction.reply({
             embeds: [PingBeforeEmbed],
@@ -24,7 +24,7 @@ module.exports = {
         const PingEmbed = new EmbedBuilder()
         .setAuthor({
             name: `Ping của ${client.user.username}`,
-            iconURL: client.user.avatarURL()
+            iconURL: client.user.avatarURL() || "https://raw.githubusercontent.com/ductridev/multi-distube-bots/refs/heads/master/assets/img/bot-avatar-1.jpg"
         })
         .addFields(
             {

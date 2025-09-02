@@ -59,32 +59,73 @@ const embedData = (dataUser, lang = 'vi') => {
     ];
 };
 
+/**
+ * Get total stats for a user across all guilds/channels for a specific language
+ * @param {string} userId
+ * @param {'vi'|'en'} language
+ */
+async function getTotalPlayerStats(userId, language) {
+    const rankings = await Ranking.find({ language });
+
+    let totalWin = 0;
+    let totalCorrect = 0;
+    let totalAnswers = 0;
+
+    for (const rank of rankings) {
+        const player = rank.players.find(p => p.id === userId);
+        if (player) {
+            totalWin += player.win || 0;
+            totalCorrect += player.true || 0;
+            totalAnswers += player.total || 0;
+        }
+    }
+
+    return {
+        win: totalWin,
+        correct: totalCorrect,
+        total: totalAnswers
+    };
+}
+
 const meEmbed = async (interaction) => {
     const userId = interaction.member.user.id;
     const guildId = interaction.guildId;
     const channelId = interaction.channelId;
 
-    // fetch ranking data + language
     const result = await getDataOfUser(userId, guildId, channelId);
     const lang = result?.language || 'vi';
 
-    // fetch coins
     const coins = await getCoins(guildId, userId);
 
-    // build embed
+    // 👇 Fetch total stats across all guilds/channels
+    const globalStats = await getTotalPlayerStats(userId, lang);
+
+    const accuracy = globalStats.total > 0
+        ? ((globalStats.correct / globalStats.total) * 100).toFixed(2)
+        : '0.00';
+
     const embed = new EmbedBuilder()
         .setColor(0x0099FF)
         .setTitle(interaction.member.displayName)
         .setDescription(lang === 'en' ? 'Your Word-Chain Stats' : 'Hồ sơ nối từ')
-        .setThumbnail(interaction.member.user.avatarURL())
-        // first show coins
-        .addFields({
-            name: lang === 'en' ? 'Coins' : 'Xu',
-            value: `\`${coins}\``,
-            inline: false
-        })
-        // then the win/accuracy fields
-        .addFields(embedData(result, lang));
+        .setThumbnail(interaction.member.user.avatarURL() || "https://raw.githubusercontent.com/ductridev/multi-distube-bots/refs/heads/master/assets/img/bot-avatar-1.jpg")
+        .addFields(
+            {
+                name: lang === 'en' ? 'Coins' : 'Xu',
+                value: `\`${coins}\``,
+                inline: false
+            },
+            {
+                name: lang === 'en' ? 'Total Wins' : 'Tổng số trận thắng',
+                value: `\`${globalStats.win}\``,
+                inline: true
+            },
+            {
+                name: lang === 'en' ? 'Correct Answers' : 'Đã trả lời đúng',
+                value: `\`${globalStats.correct}/${globalStats.total} (${accuracy}%)\``,
+                inline: true
+            }
+        );
 
     return embed;
 };
