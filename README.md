@@ -365,6 +365,21 @@ This project is licensed under the ISC License. See the LICENSE file for details
 - **Discord**: Join our support server
 - **Documentation**: Check the docs/ folder for detailed guides
 
+## ☕ Donate
+
+Do you like this project? Support it by donating!
+
+[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/ductridev) <a href="https://www.paypal.com/paypalme/trihd2104" title="ductridev">
+  <img src="https://img.shields.io/badge/PayPal-282C34?logo=paypal&logoColor=7952B3" alt="Paypal logo" title="Paypal" height="25" />
+</a>
+
+## 👥 Contributors
+
+Thanks go to these wonderful people:
+<a href="https://github.com/ductridev/bot-noi-tu/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=ductridev/bot-noi-tu" />
+</a>
+
 ---
 
 **🎮 Ready to bring word games and gambling to your Discord server!**
