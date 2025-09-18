@@ -54,22 +54,22 @@ const commandFiles = fs
 
 for (const file of commandFiles) {
     const command = require(`./commands/${file}`)
-    
+
     // Conditionally load commands based on environment variables
     let shouldLoad = true;
-    
+
     // Check Sic Bo commands
     if ((file === 'sicbo.js' || file === 'sicbo-config.js') && process.env.ENABLE_SICBO !== 'true') {
         shouldLoad = false;
         console.log(`[SKIP] Sic Bo command ${file} disabled by ENABLE_SICBO=false`);
     }
-    
+
     // Check word suggestion command
     if (file === 'them-tu.js' && process.env.ENABLE_WORD_SUGGESTIONS !== 'true') {
         shouldLoad = false;
         console.log(`[SKIP] Word suggestions command ${file} disabled by ENABLE_WORD_SUGGESTIONS=false`);
     }
-    
+
     if (shouldLoad) {
         client.commands.set(command.data.name, command)
         console.log(`[LOAD] Command ${command.data.name} loaded from ${file}`);
@@ -150,28 +150,28 @@ client.on('messageCreate', async message => {
                 // Vietnamese: last word ➞ first word
                 const parts = word.split(' ');
                 const last = parts[parts.length - 1];
-                    // Only match 2-word entries
-                    regex = new RegExp(`^${last} [^\s]+$`, 'i');
+                // Only match 2-word entries
+                regex = new RegExp(`^${last} [^\s]+$`, 'i');
             } else {
                 // English: last letter ➞ first letter
                 const lastChar = word.slice(-1);
                 regex = new RegExp(`^${lastChar}`, 'i');
             }
 
-                // filter by language and ensure only 2-word entries for Vietnamese
-                let match;
-                if (language === 'vi') {
-                    match = await DictionaryEntry.findOne({ text: { $regex: regex }, language }) ||
-                        await ContributedWord.findOne({ text: { $regex: regex }, language });
-                    // If no valid 2-word entry left, return a special value
-                    if (!match) return null;
-                    return !usedWords.includes(match.text);
-                } else {
-                    match = await DictionaryEntry.findOne({ text: { $regex: regex }, language }) ||
-                        await ContributedWord.findOne({ text: { $regex: regex }, language });
-                    if (!match) return false;
-                    return !usedWords.includes(match.text);
-                }
+            // filter by language and ensure only 2-word entries for Vietnamese
+            let match;
+            if (language === 'vi') {
+                match = await DictionaryEntry.findOne({ text: { $regex: regex }, language }) ||
+                    await ContributedWord.findOne({ text: { $regex: regex }, language });
+                // If no valid 2-word entry left, return a special value
+                if (!match) return null;
+                return !usedWords.includes(match.text);
+            } else {
+                match = await DictionaryEntry.findOne({ text: { $regex: regex }, language }) ||
+                    await ContributedWord.findOne({ text: { $regex: regex }, language });
+                if (!match) return false;
+                return !usedWords.includes(match.text);
+            }
         };
 
         const randomWord = async () => {
@@ -284,8 +284,14 @@ client.on('messageCreate', async message => {
             }
         }
 
-        if (message.content.includes("bot") && message.content.includes("ngu")) {
-            sendMessageToChannel(`<@${message.author.id}> mày mới ngu thì có đó nhóc ác`, message.channel.id);
+        if (message.content.toLowerCase().includes('bot') && ["ngu", "óc", "cặc", "lợn", "chó"].find(w => message.content.toLowerCase().includes(w))) {
+            const messages = [
+                "mày mới ngu thì có đó nhóc ác",
+                "mày mới là con lợn đấy nhóc ác",
+                "mày mới là con chó đấy nhóc ác",
+                "phải sao ạ? phải chịuuuuuu"
+            ]
+            sendMessageToChannel(`<@${message.author.id}> ${messages[Math.floor(Math.random() * messages.length)]}`, message.channel.id);
             return;
         }
 
